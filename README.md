@@ -15,8 +15,14 @@
 ### 2.2 Run FastAPI
 > uvicorn main:app --reload
 ## 3. Setup FastAPI Routers for Table Users
-### 3.1 Clone GitHub Repository
-> git clone https://github.com/geloyaco/LabClass_BackEnd.git
+### 3.1 Select Interpreter
+> Open your VS Code
+> Install the Python extension (if not installed yet)
+> Click 'ctrl + shift + P' then search for Python
+> Click 'Select Interpreter'
+> Choose the one with your virtual environment's name
+### 3.2 Clone GitHub Repository
+> git clone [https://github.com/geloyaco/LabClass_BackEnd.git](https://github.com/AshleyRiannaMorales/LabClass_BE.git)
 ## 4. Test the FastAPI Routers
 ### 4.1 Run FastAPI
 > uvicorn main:app --reload
