@@ -178,6 +178,51 @@ async def get_pending_booking_requests(db=Depends(get_db)):
     except Exception as e:
         logger.exception("Error retrieving pending booking requests: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
+    
+@AdminRouter.get("/admin/approved-booking-requests", response_model=list)
+async def get_approved_booking_requests(db=Depends(get_db)):
+    try:
+        # Retrieve approved booking requests
+        query_approved_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Approved'"
+        db[0].execute(query_approved_requests)
+        approved_requests = [{
+            "bookingRequestID": request[0],
+            "instructorID": request[1],
+            "computerLabID": request[2],
+            "bookingDate": request[3],
+            "bookingStartTime": request[4],
+            "bookingEndTime": request[5],
+            "bookingPurpose": request[6],
+            "bookingReqStatus": request[7]
+        } for request in db[0].fetchall()]
+
+        return approved_requests
+    except Exception as e:
+        logger.exception("Error retrieving approved booking requests: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+    
+@AdminRouter.get("/admin/rejected-booking-requests", response_model=list)
+async def get_rejected_booking_requests(db=Depends(get_db)):
+    try:
+        # Retrieve rejected booking requests
+        query_rejected_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Rejected'"
+        db[0].execute(query_rejected_requests)
+        rejected_requests = [{
+            "bookingRequestID": request[0],
+            "instructorID": request[1],
+            "computerLabID": request[2],
+            "bookingDate": request[3],
+            "bookingStartTime": request[4],
+            "bookingEndTime": request[5],
+            "bookingPurpose": request[6],
+            "bookingReqStatus": request[7]
+        } for request in db[0].fetchall()]
+
+        return rejected_requests
+    except Exception as e:
+        logger.exception("Error retrieving rejected booking requests: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+
  
 @AdminRouter.put("/admin/{admin_id}", response_model=dict)
 async def update_admin(
