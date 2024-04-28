@@ -1,4 +1,3 @@
-# model/bookingrequest.py
 from fastapi import Depends, HTTPException, APIRouter, Form
 from .db import get_db
 
@@ -50,7 +49,7 @@ async def read_booking_request(
 
 @BookingRequestRouter.post("/booking-requests/", response_model=dict)
 async def create_booking_request(
-    instructor_id: int = Form(...),
+    instructorID: int = Form(...),
     computer_lab_id: int = Form(...),
     booking_date: str = Form(...),
     booking_start_time: str = Form(...),
@@ -58,14 +57,16 @@ async def create_booking_request(
     booking_purpose: str = Form(...),
     db=Depends(get_db)
 ):
-    # Derive default value for booking status
-    booking_req_status = "Pending"  # Default status
-
-    # You may remove this line if admin ID is not needed for creation
-    admin_id = None
-
-    query = "INSERT INTO booking_request (instructorID, computerLabID, bookingDate, bookingStartTime, bookingEndTime, bookingPurpose, bookingReqStatus, adminID) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-    db[0].execute(query, (instructor_id, computer_lab_id, booking_date, booking_start_time, booking_end_time, booking_purpose, booking_req_status, admin_id))
+    # Set default values
+    booking_req_status = 'Pending'
+    
+    # Insert the booking request into the database
+    query = """
+        INSERT INTO booking_request 
+        (instructorID, computerLabID, bookingDate, bookingStartTime, bookingEndTime, bookingPurpose, bookingReqStatus) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """
+    db[0].execute(query, (instructorID, computer_lab_id, booking_date, booking_start_time, booking_end_time, booking_purpose, booking_req_status))
     db[1].commit()
 
     # Retrieve the last inserted ID using LAST_INSERT_ID()
@@ -74,10 +75,11 @@ async def create_booking_request(
 
     return {"bookingRequestID": new_booking_request_id}
 
+
 @BookingRequestRouter.put("/booking-requests/{booking_request_id}", response_model=dict)
 async def update_booking_request(
     booking_request_id: int,
-    instructor_id: int = Form(...),
+    instructorID: int = Form(...),
     computer_lab_id: int = Form(...),
     booking_date: str = Form(...),
     booking_start_time: str = Form(...),
@@ -86,11 +88,19 @@ async def update_booking_request(
     booking_req_status: str = Form(...),
     db=Depends(get_db)
 ):
-    query = "UPDATE booking_request SET instructorID = %s, computerLabID = %s, bookingDate = %s, bookingStartTime = %s, bookingEndTime = %s, bookingPurpose = %s, bookingReqStatus = %s WHERE bookingRequestID = %s"
-    db[0].execute(query, (instructor_id, computer_lab_id, booking_date, booking_start_time, booking_end_time, booking_purpose, booking_req_status, booking_request_id))
+    # Update the booking request in the database
+    query = """
+        UPDATE booking_request 
+        SET instructorID = %s, computerLabID = %s, 
+            bookingDate = %s, bookingStartTime = %s, bookingEndTime = %s, 
+            bookingPurpose = %s, bookingReqStatus = %s
+        WHERE bookingRequestID = %s
+    """
+    db[0].execute(query, (instructorID, computer_lab_id, booking_date, booking_start_time, booking_end_time, booking_purpose, booking_req_status, booking_request_id))
     db[1].commit()
 
     return {"message": "Booking request updated successfully"}
+
 
 @BookingRequestRouter.delete("/booking-requests/{booking_request_id}", response_model=dict)
 async def delete_booking_request(
