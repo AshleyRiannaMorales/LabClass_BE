@@ -22,7 +22,7 @@
 - Click 'Select Interpreter'
 - Choose the one with your virtual environment's name
 ### 3.2 Clone GitHub Repository
-> git clone [https://github.com/geloyaco/LabClass_BackEnd.git](https://github.com/AshleyRiannaMorales/LabClass_BE.git)
+> git clone [https://github.com/AshleyRiannaMorales/LabClass_BE.git](https://github.com/AshleyRiannaMorales/LabClass_BE.git)
 ## 4. Test the FastAPI Routers
 ### 4.1 Run FastAPI
 > uvicorn main:app --reload
