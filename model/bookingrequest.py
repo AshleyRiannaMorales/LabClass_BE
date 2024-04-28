@@ -85,7 +85,6 @@ async def update_booking_request(
     booking_start_time: str = Form(...),
     booking_end_time: str = Form(...),
     booking_purpose: str = Form(...),
-    booking_req_status: str = Form(...),
     db=Depends(get_db)
 ):
     # Update the booking request in the database
@@ -93,10 +92,10 @@ async def update_booking_request(
         UPDATE booking_request 
         SET instructorID = %s, computerLabID = %s, 
             bookingDate = %s, bookingStartTime = %s, bookingEndTime = %s, 
-            bookingPurpose = %s, bookingReqStatus = %s
+            bookingPurpose = %s
         WHERE bookingRequestID = %s
     """
-    db[0].execute(query, (instructorID, computer_lab_id, booking_date, booking_start_time, booking_end_time, booking_purpose, booking_req_status, booking_request_id))
+    db[0].execute(query, (instructorID, computer_lab_id, booking_date, booking_start_time, booking_end_time, booking_purpose, booking_request_id))
     db[1].commit()
 
     return {"message": "Booking request updated successfully"}
