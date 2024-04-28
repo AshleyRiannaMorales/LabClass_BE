@@ -178,8 +178,20 @@ async def delete_booking_request(
     booking_request_id: int,
     db=Depends(get_db)
 ):
-    query = "DELETE FROM booking_request WHERE bookingRequestID = %s"
-    db[0].execute(query, (booking_request_id,))
-    db[1].commit()
+    try:
+        # Execute the DELETE query to remove the booking request
+        query = "DELETE FROM booking_request WHERE bookingRequestID = %s"
+        result = db[0].execute(query, (booking_request_id,))
+        db[1].commit()
 
-    return {"message": "Booking request deleted successfully"}
+        # Check if any rows were affected (i.e., if the booking request was deleted)
+        if result.rowcount == 0:
+            # No rows were affected, so the booking request was not found
+            raise HTTPException(status_code=404, detail="Booking request not found")
+
+        # Booking request was successfully deleted
+        return {"message": "Booking request deleted successfully"}
+    except Exception as e:
+        # Log the exception for troubleshooting
+        logging.error(f"Failed to delete booking request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete booking request")
