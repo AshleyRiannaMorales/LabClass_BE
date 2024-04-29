@@ -12,6 +12,8 @@
 ## 2. Setup FastAPI
 ### 2.1 Install FastAPI, Uvicorn, and MySQL Connector
 > pip install fastapi uvicorn mysql-connector-python
+> pip install bcrypt
+> pip install python-multipart
 ### 2.2 Run FastAPI
 > uvicorn main:app --reload
 ## 3. Setup FastAPI Routers for Table Users
