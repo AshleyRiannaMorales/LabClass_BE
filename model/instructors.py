@@ -56,37 +56,27 @@ async def instructor_login(
     try:
         # Check if the instructor with the provided identifier (instructorID or instructorEmail) exists
         query_check_instructor = """
-            SELECT instructorID, instructorEmail
-            FROM instructor
-            WHERE instructorID = %s OR instructorEmail = %s
-        """
+    SELECT ia.instructorID, i.instructorEmail, ia.instructorPassword
+    FROM instructor i
+    INNER JOIN instructor_accounts ia ON i.instructorID = ia.instructorID
+    WHERE i.instructorID = %s OR i.instructorEmail = %s
+"""
         db[0].execute(query_check_instructor, (IDorEmail, IDorEmail))
-        instructor = db[0].fetchone()
+        instructor_data = db[0].fetchone()
 
-        if not instructor:
+        if instructor_data:
+            stored_password_hash = instructor_data[2]
+            # Verify the provided password against the stored hashed password
+            if bcrypt.checkpw(password.encode('utf-8'), stored_password_hash.encode('utf-8')):
+                return {
+                    "message": "Login successful!",
+                    "instructorID": instructor_data[0],
+                    "instructorEmail": instructor_data[1]
+                }
+            else:
+                raise HTTPException(status_code=401, detail="Incorrect password provided")
+        else:
             raise HTTPException(status_code=404, detail="Instructor not found or credentials do not match.")
-
-        # Retrieve the instructorID and instructorEmail from the query result
-        instructorID = instructor[0]
-        instructorEmail = instructor[1]
-
-        # Query the instructor_accounts table to get the stored password
-        query_get_password = """
-            SELECT instructorPassword
-            FROM instructor_accounts
-            WHERE instructorID = %s
-        """
-        db[0].execute(query_get_password, (instructorID,))
-        stored_password = db[0].fetchone()
-
-        if not stored_password:
-            raise HTTPException(status_code=500, detail="Password not found for the instructor.")
-
-        # Check if the provided password matches the stored password
-        if password != stored_password[0]:
-            raise HTTPException(status_code=401, detail="Incorrect password provided.")
-
-        return {"message": "Login successful!", "instructorID": instructorID, "instructorEmail": instructorEmail}
     except HTTPException as http_error:
         raise http_error
     except Exception as e:
@@ -101,29 +91,35 @@ async def update_password(
     db=Depends(get_db)
 ):
     try:
-        # Verify if the instructorID and oldPassword match
+        # Verify if the instructorID exists and retrieve the hashed password
         query_verify_password = """
             SELECT instructorPassword
             FROM instructor_accounts
             WHERE instructorID = %s
         """
         db[0].execute(query_verify_password, (instructorID,))
-        stored_password = db[0].fetchone()
+        stored_password_hash = db[0].fetchone()
 
-        if not stored_password:
+        if not stored_password_hash:
             raise HTTPException(status_code=404, detail="Instructor not found.")
 
-        # Check if the provided oldPassword matches the stored password
-        if oldPassword != stored_password[0]:
+        # Extract the hashed password from the tuple
+        stored_password_hash = stored_password_hash[0]
+
+        # Check if the provided oldPassword matches the stored hashed password
+        if not bcrypt.checkpw(oldPassword.encode('utf-8'), stored_password_hash.encode('utf-8')):
             raise HTTPException(status_code=401, detail="Incorrect old password.")
 
-        # Update the instructor's password with the new password
+        # Hash the new password before updating it in the database
+        hashed_new_password = bcrypt.hashpw(newPassword.encode('utf-8'), bcrypt.gensalt())
+
+        # Update the instructor's password with the new hashed password
         query_update_password = """
             UPDATE instructor_accounts
             SET instructorPassword = %s
             WHERE instructorID = %s
         """
-        db[0].execute(query_update_password, (newPassword, instructorID))
+        db[0].execute(query_update_password, (hashed_new_password, instructorID))
         db[1].commit()
 
         return {"message": "Password updated successfully."}
@@ -134,3 +130,14 @@ async def update_password(
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
     finally:
         db[0].close()
+
+        # Password hashing function using bcrypt
+def hash_password(password: str):
+    # Generate a salt and hash the password
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed_password.decode('utf-8')  # Decode bytes to string for storage
+
+#instructorID: 100000
+#instructorPassword: old pass-yaco123
+#instructorPassword: new pass-yaco12345

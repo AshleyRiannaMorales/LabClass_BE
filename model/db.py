@@ -17,15 +17,3 @@ def get_db():
     finally:
         cursor.close()
         db.close()
-
-def get_current_admin_id(token: str = Header(...)):
-    """
-    Extracts the admin ID from the token in the request header.
-    This function depends on your specific authentication implementation.
-    """
-    # Your authentication logic to decode the token and extract admin ID goes here
-    # Example:
-    # admin_id = decode_token(token)
-    # if not admin_id:
-    #     raise HTTPException(status_code=401, detail="Invalid or missing authentication token")
-    # return admin_id

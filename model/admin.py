@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, APIRouter, Form
 from .db import get_db
-import bcrypt
+import bcrypt  
 import logging
 
 
@@ -18,6 +18,35 @@ async def read_admins(
     db[0].execute(query)
     admins = [{"adminID": admin[0]} for admin in db[0].fetchall()]
     return admins
+@AdminRouter.post("/admin/create", response_model=dict)
+async def create_admin(
+    admin_id: int = Form(...),
+    admin_pass: str = Form(...),
+    db=Depends(get_db)
+):
+    try:
+        # Hash the password using bcrypt
+        hashed_password = hash_password(admin_pass)
+
+        # Check if the admin with the provided ID already exists
+        query_check_admin = "SELECT adminID FROM admin WHERE adminID = %s"
+        db[0].execute(query_check_admin, (admin_id,))
+        existing_admin = db[0].fetchone()
+
+        if existing_admin:
+            raise HTTPException(status_code=400, detail="Admin with this ID already exists")
+
+        # Insert the admin details into the database
+        query_insert_admin = "INSERT INTO admin (adminID, adminPass) VALUES (%s, %s)"
+        db[0].execute(query_insert_admin, (admin_id, hashed_password))
+        db[1].commit()
+
+        return {"message": "Admin created successfully"}
+    except HTTPException as http_error:
+        raise http_error
+    except Exception as e:
+        logger.exception("Error creating admin: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
 
 @AdminRouter.post("/login/admin", response_model=dict)
@@ -26,20 +55,28 @@ async def admin_login(
     admin_pass: str = Form(...), 
     db=Depends(get_db)
 ):
-    query = "SELECT adminID FROM admin WHERE adminID = %s AND adminPass = %s"
-    db[0].execute(query, (admin_id, admin_pass))
-    admin = db[0].fetchone()
-    if admin:
-        return {"adminID": admin[0], "message": "Log In Successful"}
-    else:
-        # Check if admin ID exists
-        query_check_id = "SELECT adminID FROM admin WHERE adminID = %s"
-        db[0].execute(query_check_id, (admin_id,))
-        existing_id = db[0].fetchone()
-        if not existing_id:
-            raise HTTPException(status_code=404, detail="Admin account does not exist with the provided ID")
+    try:
+        # Hash the provided password
+        hashed_password = hash_password(admin_pass)
+
+        # Check if admin ID and hashed password match in the database
+        query = "SELECT adminID, adminPass FROM admin WHERE adminID = %s"
+        db[0].execute(query, (admin_id,))
+        admin_data = db[0].fetchone()
+
+        if admin_data:
+            stored_password = admin_data[1]
+            if bcrypt.checkpw(admin_pass.encode('utf-8'), stored_password.encode('utf-8')):
+                return {"adminID": admin_data[0], "message": "Log In Successful"}
+            else:
+                raise HTTPException(status_code=401, detail="Incorrect password provided")
         else:
-            raise HTTPException(status_code=401, detail="Incorrect password provided")
+            raise HTTPException(status_code=404, detail="Admin account does not exist with the provided ID")
+    except HTTPException as http_error:
+        raise http_error
+    except Exception as e:
+        logger.exception("Error logging in admin: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
         
 @AdminRouter.put("/admin/verify/instructor/{request_id}", response_model=dict)
 async def verify_instructor(
@@ -117,12 +154,15 @@ async def create_instructor_account(
         if not instructor:
             raise HTTPException(status_code=404, detail="Instructor not found or credentials do not match.")
 
+        # Hash the default password using bcrypt
+        hashed_password = hash_password(defaultPassword)
+
         # Insert the instructor account details into the instructor_accounts table
         query_insert_instructor_account = """
             INSERT INTO instructor_accounts (instructorID, instructorPassword)
             VALUES (%s, %s)
         """
-        db[0].execute(query_insert_instructor_account, (instructorID, defaultPassword))
+        db[0].execute(query_insert_instructor_account, (instructorID, hashed_password))
         db[1].commit()
 
         return {"message": "Instructor account created successfully."}
@@ -230,17 +270,26 @@ async def update_admin(
     admin_pass: str = Form(...),
     db=Depends(get_db)
 ):
-    # Update admin information in the database 
-    query = "UPDATE admin SET adminPass = %s WHERE adminID = %s"
-    db[0].execute(query, (admin_pass, admin_id))
+    try:
+        # Hash the provided password
+        hashed_password = hash_password(admin_pass)
 
-    # Check if the update was successful
-    if db[0].rowcount > 0:
-        db[1].commit()
-        return {"message": "Admin updated successfully"}
-    
-    # If no rows were affected, admin not found
-    raise HTTPException(status_code=404, detail="Admin not found")
+        # Update admin information in the database 
+        query = "UPDATE admin SET adminPass = %s WHERE adminID = %s"
+        db[0].execute(query, (hashed_password, admin_id))
+
+        # Check if the update was successful
+        if db[0].rowcount > 0:
+            db[1].commit()
+            return {"message": "Admin updated successfully"}
+        
+        # If no rows were affected, admin not found
+        raise HTTPException(status_code=404, detail="Admin not found")
+    except HTTPException as http_error:
+        raise http_error
+    except Exception as e:
+        logger.exception("Error updating admin: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
 @AdminRouter.delete("/admin/{admin_id}", response_model=dict)
 async def delete_admin(
@@ -268,3 +317,14 @@ async def delete_admin(
     finally:
         # Close the database cursor
         db[0].close()
+
+        # Password hashing function using bcrypt
+def hash_password(password: str):
+    # Generate a salt and hash the password
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed_password.decode('utf-8')  # Decode bytes to string for storage
+
+#admin old pass: admin123
+#new admin pass: UICAdmin2024
+
