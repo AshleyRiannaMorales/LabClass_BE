@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, APIRouter, Form
 from .db import get_db
 import logging
+from typing import List, Dict
 from datetime import timedelta 
 
 
@@ -38,32 +39,13 @@ def format_time_from_duration(duration_str):
 
 @BookingRequestRouter.get("/booking-requests/", response_model=list)
 async def read_booking_requests(db=Depends(get_db)):
-    query = "SELECT * FROM booking_request"
-    db[0].execute(query)
-    booking_requests = []
-
-    for booking in db[0].fetchall():
-        formatted_booking = {
-            "bookingRequestID": booking[0],
-            "instructorID": booking[1],
-            "computerLabID": booking[2],
-            "bookingDate": booking[3],
-            "bookingStartTime": format_time_from_duration(booking[4]),
-            "bookingEndTime": format_time_from_duration(booking[5]),
-            "bookingPurpose": booking[6],
-            "bookingReqStatus": booking[7],  # Include booking status
-        }
-        booking_requests.append(formatted_booking)
-
-    return booking_requests
-
-@BookingRequestRouter.get("/booking-requests/newest-to-oldest", response_model=list)
-async def read_booking_requests_from_newest_to_oldest(db=Depends(get_db)):
     try:
-        # Retrieve booking requests sorted by creation date/time (newest to oldest)
         query = """
-            SELECT * FROM booking_request
-            ORDER BY bookingRequestID DESC
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorID, CONCAT(i.instructorFirstName, ' ', i.instructorLastName) AS instructorName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
         """
         db[0].execute(query)
         booking_requests = []
@@ -72,6 +54,7 @@ async def read_booking_requests_from_newest_to_oldest(db=Depends(get_db)):
             formatted_booking = {
                 "bookingRequestID": booking[0],
                 "instructorID": booking[1],
+                "instructorName": booking[9],  # Using the combined instructor name from index 9
                 "computerLabID": booking[2],
                 "bookingDate": booking[3],
                 "bookingStartTime": format_time_from_duration(booking[4]),
@@ -85,14 +68,17 @@ async def read_booking_requests_from_newest_to_oldest(db=Depends(get_db)):
     except Exception as e:
         logger.exception("Error retrieving booking requests: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
-    
-@BookingRequestRouter.get("/booking-requests/oldest-to-newest", response_model=list)
-async def read_booking_requests_from_oldest_to_newest(db=Depends(get_db)):
+
+@BookingRequestRouter.get("/booking-requests/newest-to-oldest", response_model=list)
+async def read_booking_requests_from_newest_to_oldest(db=Depends(get_db)):
     try:
-        # Retrieve booking requests sorted by creation date/time (oldest to newest)
         query = """
-            SELECT * FROM booking_request
-            ORDER BY bookingRequestID ASC
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorID, CONCAT(i.instructorFirstName, ' ', i.instructorLastName) AS instructorName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
+            ORDER BY br.bookingRequestID DESC
         """
         db[0].execute(query)
         booking_requests = []
@@ -101,6 +87,40 @@ async def read_booking_requests_from_oldest_to_newest(db=Depends(get_db)):
             formatted_booking = {
                 "bookingRequestID": booking[0],
                 "instructorID": booking[1],
+                "instructorName": booking[9],  # Using the combined instructor name from index 9
+                "computerLabID": booking[2],
+                "bookingDate": booking[3],
+                "bookingStartTime": format_time_from_duration(booking[4]),
+                "bookingEndTime": format_time_from_duration(booking[5]),
+                "bookingPurpose": booking[6],
+                "bookingReqStatus": booking[7]
+            }
+            booking_requests.append(formatted_booking)
+
+        return booking_requests
+    except Exception as e:
+        logger.exception("Error retrieving booking requests: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+
+@BookingRequestRouter.get("/booking-requests/oldest-to-newest", response_model=list)
+async def read_booking_requests_from_oldest_to_newest(db=Depends(get_db)):
+    try:
+        query = """
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorID, CONCAT(i.instructorFirstName, ' ', i.instructorLastName) AS instructorName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
+            ORDER BY br.bookingRequestID ASC
+        """
+        db[0].execute(query)
+        booking_requests = []
+
+        for booking in db[0].fetchall():
+            formatted_booking = {
+                "bookingRequestID": booking[0],
+                "instructorID": booking[1],
+                "instructorName": booking[9],  # Using the combined instructor name from index 9
                 "computerLabID": booking[2],
                 "bookingDate": booking[3],
                 "bookingStartTime": format_time_from_duration(booking[4]),
@@ -120,90 +140,139 @@ async def read_booking_request(
     booking_request_id: int, 
     db=Depends(get_db)
 ):
-    query = "SELECT * FROM booking_request WHERE bookingRequestID = %s"
-    db[0].execute(query, (booking_request_id,))
-    booking_request = db[0].fetchone()
-    if booking_request:
-        return {
-            "bookingRequestID": booking_request[0],
-            "instructorID": booking_request[1],
-            "computerLabID": booking_request[2],
-            "bookingDate": booking_request[3],
-            "bookingStartTime": format_time_from_duration(booking_request[4]),
-            "bookingEndTime": format_time_from_duration(booking_request[5]),
-            "bookingPurpose": booking_request[6],
-            "bookingReqStatus": booking_request[7],  # Include booking status
-        }
-    raise HTTPException(status_code=404, detail="Booking request not found")
+    try:
+        query = """
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorID, CONCAT(i.instructorFirstName, ' ', i.instructorLastName) AS instructorName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
+            WHERE br.bookingRequestID = %s
+        """
+        db[0].execute(query, (booking_request_id,))
+        booking_request = db[0].fetchone()
 
-@BookingRequestRouter.get("/pending-booking-requests", response_model=list)
+        if booking_request:
+            formatted_booking = {
+                "bookingRequestID": booking_request[0],
+                "instructorID": booking_request[1],
+                "instructorName": f"{booking_request[9]}",  # Using the combined instructor name from index 9
+                "computerLabID": booking_request[2],
+                "bookingDate": booking_request[3],
+                "bookingStartTime": format_time_from_duration(booking_request[4]),
+                "bookingEndTime": format_time_from_duration(booking_request[5]),
+                "bookingPurpose": booking_request[6],
+                "bookingReqStatus": booking_request[7],  # Include booking status
+            }
+            return formatted_booking
+
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    except Exception as e:
+        logger.exception("Error retrieving booking request: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+
+@BookingRequestRouter.get("/pending-booking-requests", response_model=List[Dict])
 async def get_pending_booking_requests(db=Depends(get_db)):
     try:
         # Retrieve pending booking requests
-        query_pending_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Pending'"
+        query_pending_requests = """
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorFirstName, i.instructorLastName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
+            WHERE br.bookingReqStatus = 'Pending'
+        """
 
         db[0].execute(query_pending_requests)
         pending_requests = []
+
         for request in db[0].fetchall():
             formatted_booking = {
-            "bookingRequestID": request[0],
-            "instructorID": request[1],
-            "computerLabID": request[2],
-            "bookingDate": request[3],
-            "bookingStartTime": format_time_from_duration(request[4]),
-            "bookingEndTime": format_time_from_duration(request[5]),
-            "bookingPurpose": request[6]
-        } 
+                "bookingRequestID": request[0],
+                "instructorID": request[1],
+                "instructorName": f"{request[8]} {request[9]}",  # Concatenate first name and last name
+                "computerLabID": request[2],
+                "bookingDate": request[3],
+                "bookingStartTime": format_time_from_duration(request[4]),
+                "bookingEndTime": format_time_from_duration(request[5]),
+                "bookingPurpose": request[6],
+                "bookingReqStatus": request[7]
+            } 
             pending_requests.append(formatted_booking)
+
         return pending_requests
     
     except Exception as e:
         logger.exception("Error retrieving pending booking requests: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
     
-@BookingRequestRouter.get("/approved-booking-requests", response_model=list)
+@BookingRequestRouter.get("/approved-booking-requests", response_model=List[Dict])
 async def get_approved_booking_requests(db=Depends(get_db)):
     try:
         # Retrieve approved booking requests
-        query_approved_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Approved'"
-        
+        query_approved_requests = """
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorFirstName, i.instructorLastName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
+            WHERE br.bookingReqStatus = 'Approved'
+        """
+
         db[0].execute(query_approved_requests)
         approved_requests = []
+
         for request in db[0].fetchall():
             formatted_booking = {
-            "bookingRequestID": request[0],
-            "instructorID": request[1],
-            "computerLabID": request[2],
-            "bookingDate": request[3],
-            "bookingStartTime": format_time_from_duration(request[4]),
-            "bookingEndTime": format_time_from_duration(request[5]),
-            "bookingPurpose": request[6]
-        } 
+                "bookingRequestID": request[0],
+                "instructorID": request[1],
+                "instructorName": f"{request[8]} {request[9]}",  # Concatenate first name and last name
+                "computerLabID": request[2],
+                "bookingDate": request[3],
+                "bookingStartTime": format_time_from_duration(request[4]),
+                "bookingEndTime": format_time_from_duration(request[5]),
+                "bookingPurpose": request[6],
+                "bookingReqStatus": request[7]         
+            }
             approved_requests.append(formatted_booking)
+
         return approved_requests
     
     except Exception as e:
         logger.exception("Error retrieving approved booking requests: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
     
-@BookingRequestRouter.get("/rejected-booking-requests", response_model=list)
+@BookingRequestRouter.get("/rejected-booking-requests", response_model=List[Dict])
 async def get_rejected_booking_requests(db=Depends(get_db)):
     try:
         # Retrieve rejected booking requests
-        query_rejected_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Rejected'"
+        query_rejected_requests = """
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorFirstName, i.instructorLastName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
+            WHERE br.bookingReqStatus = 'Rejected'
+        """
+
         db[0].execute(query_rejected_requests)
         rejected_requests = []
+
         for request in db[0].fetchall():
             formatted_booking = {
-            "bookingRequestID": request[0],
-            "instructorID": request[1],
-            "computerLabID": request[2],
-            "bookingDate": request[3],
-            "bookingStartTime": format_time_from_duration(request[4]),
-            "bookingEndTime": format_time_from_duration(request[5]),
-            "bookingPurpose": request[6]
-        } 
+                "bookingRequestID": request[0],
+                "instructorID": request[1],
+                "computerLabID": request[2],
+                "bookingDate": request[3],
+                "bookingStartTime": format_time_from_duration(request[4]),
+                "bookingEndTime": format_time_from_duration(request[5]),
+                "bookingPurpose": request[6],
+                "bookingReqStatus": request[7],
+                "instructorName": f"{request[8]} {request[9]}"  # Concatenate first name and last name
+            }
             rejected_requests.append(formatted_booking)
+
         return rejected_requests
     
     except Exception as e:
