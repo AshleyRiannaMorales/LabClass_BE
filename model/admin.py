@@ -2,10 +2,38 @@ from fastapi import Depends, HTTPException, APIRouter, Form
 from .db import get_db
 import bcrypt  
 import logging
+from datetime import timedelta 
 
 
 AdminRouter = APIRouter(tags=["Admin"])
 logger = logging.getLogger(__name__)
+
+def format_time_from_duration(duration_str):
+    """
+    Convert a duration string (e.g., 'PT9H' or 'PT7H30M') or timedelta object
+    into a formatted time string (e.g., '09:00' or '07:30').
+    """
+    if isinstance(duration_str, str) and duration_str.startswith("PT"):
+        # If duration_str is a string and starts with 'PT', parse it as a timedelta
+        duration = timedelta()
+        for part in duration_str[2:].split('H'):
+            if part.endswith('M'):
+                duration += timedelta(minutes=int(part[:-1]))
+            else:
+                duration += timedelta(hours=int(part))
+        
+        # Format the timedelta as a time string
+        hours, remainder = divmod(duration.seconds // 3600, 1)
+        minutes = remainder * 60
+        return f"{int(hours):02}:{int(minutes):02}"
+    
+    elif isinstance(duration_str, timedelta):
+        # If duration_str is already a timedelta object, format it as a time string
+        hours, remainder = divmod(duration_str.seconds // 3600, 1)
+        minutes = remainder * 60
+        return f"{int(hours):02}:{int(minutes):02}"
+
+    return str(duration_str)  # Return the original value as string if not recognized
 
 
 # CRUD operations for admin
@@ -18,6 +46,7 @@ async def read_admins(
     db[0].execute(query)
     admins = [{"adminID": admin[0]} for admin in db[0].fetchall()]
     return admins
+
 @AdminRouter.post("/admin/create", response_model=dict)
 async def create_admin(
     admin_id: int = Form(...),
@@ -108,33 +137,7 @@ async def verify_instructor(
     except Exception as e:
         logger.exception("Error verifying instructor: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
-   
-   
-@AdminRouter.get("/admin/pending_verification", response_model=list)
-async def get_pending_verification_requests(
-    db=Depends(get_db)
-):
-    try:
-        # Query the database for pending verification requests
-        query = """
-            SELECT requestID, instructorID, instructorEmail, instructorFirstName, instructorLastName
-            FROM verification_requests WHERE status = 'pending'
-        """
-        db[0].execute(query)
-        pending_requests = [
-            {
-                "requestID": request[0],
-                "instructorID": request[1],
-                "instructorEmail": request[2],
-                "instructorFirstName": request[3],
-                "instructorLastName": request[4]
-            }
-            for request in db[0].fetchall()
-        ]
-        return pending_requests
-    except Exception as e:
-        logger.exception("Error retrieving pending verification requests: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+    
     
 @AdminRouter.post("/admin/create_instructor_account", response_model=dict)
 async def create_instructor_account(
@@ -197,71 +200,7 @@ async def reject_booking_request(booking_request_id: int, db=Depends(get_db)):
     except Exception as e:
         logger.exception("Error rejecting booking request: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
-    
-@AdminRouter.get("/admin/pending-booking-requests", response_model=list)
-async def get_pending_booking_requests(db=Depends(get_db)):
-    try:
-        # Retrieve pending booking requests
-        query_pending_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Pending'"
-        db[0].execute(query_pending_requests)
-        pending_requests = [{
-            "bookingRequestID": request[0],
-            "instructorID": request[1],
-            "computerLabID": request[2],
-            "bookingDate": request[3],
-            "bookingStartTime": request[4],
-            "bookingEndTime": request[5],
-            "bookingPurpose": request[6]
-        } for request in db[0].fetchall()]
 
-        return pending_requests
-    except Exception as e:
-        logger.exception("Error retrieving pending booking requests: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error occurred.")
-    
-@AdminRouter.get("/admin/approved-booking-requests", response_model=list)
-async def get_approved_booking_requests(db=Depends(get_db)):
-    try:
-        # Retrieve approved booking requests
-        query_approved_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Approved'"
-        db[0].execute(query_approved_requests)
-        approved_requests = [{
-            "bookingRequestID": request[0],
-            "instructorID": request[1],
-            "computerLabID": request[2],
-            "bookingDate": request[3],
-            "bookingStartTime": request[4],
-            "bookingEndTime": request[5],
-            "bookingPurpose": request[6],
-            "bookingReqStatus": request[7]
-        } for request in db[0].fetchall()]
-
-        return approved_requests
-    except Exception as e:
-        logger.exception("Error retrieving approved booking requests: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error occurred.")
-    
-@AdminRouter.get("/admin/rejected-booking-requests", response_model=list)
-async def get_rejected_booking_requests(db=Depends(get_db)):
-    try:
-        # Retrieve rejected booking requests
-        query_rejected_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Rejected'"
-        db[0].execute(query_rejected_requests)
-        rejected_requests = [{
-            "bookingRequestID": request[0],
-            "instructorID": request[1],
-            "computerLabID": request[2],
-            "bookingDate": request[3],
-            "bookingStartTime": request[4],
-            "bookingEndTime": request[5],
-            "bookingPurpose": request[6],
-            "bookingReqStatus": request[7]
-        } for request in db[0].fetchall()]
-
-        return rejected_requests
-    except Exception as e:
-        logger.exception("Error retrieving rejected booking requests: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
  
 @AdminRouter.put("/admin/{admin_id}", response_model=dict)
@@ -327,4 +266,3 @@ def hash_password(password: str):
 
 #admin old pass: admin123
 #new admin pass: UICAdmin2024
-

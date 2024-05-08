@@ -6,6 +6,8 @@ from model.bookingrequest import BookingRequestRouter
 from model.semschedule import SemScheduleRouter
 from model.computerlab import ComputerLabRouter  
 from fastapi.middleware.cors import CORSMiddleware
+from model.verificationrequest import VerificationRequests  
+
 
 app = FastAPI()
 
@@ -18,6 +20,7 @@ origins = [
 # Include CRUD routes from modules
 app.include_router(InstructorsRouter, prefix="/api")
 app.include_router(AdminRouter, prefix="/api")
+app.include_router(VerificationRequests, prefix="/api")  
 app.include_router(BookingRequestRouter, prefix="/api")
 app.include_router(SemScheduleRouter, prefix="/api")
 app.include_router(ComputerLabRouter, prefix="/api")  

@@ -1,29 +1,60 @@
-# model/bookingrequest.py
 from fastapi import Depends, HTTPException, APIRouter, Form
 from .db import get_db
 import logging
+from datetime import timedelta 
+
 
 BookingRequestRouter = APIRouter(tags=["Booking Requests"])
 logger = logging.getLogger(__name__)
 
+def format_time_from_duration(duration_str):
+    """
+    Convert a duration string (e.g., 'PT9H' or 'PT7H30M') or timedelta object
+    into a formatted time string (e.g., '09:00' or '07:30').
+    """
+    if isinstance(duration_str, str) and duration_str.startswith("PT"):
+        # If duration_str is a string and starts with 'PT', parse it as a timedelta
+        duration = timedelta()
+        for part in duration_str[2:].split('H'):
+            if part.endswith('M'):
+                duration += timedelta(minutes=int(part[:-1]))
+            else:
+                duration += timedelta(hours=int(part))
+        
+        # Format the timedelta as a time string
+        hours, remainder = divmod(duration.seconds // 3600, 1)
+        minutes = remainder * 60
+        return f"{int(hours):02}:{int(minutes):02}"
+    
+    elif isinstance(duration_str, timedelta):
+        # If duration_str is already a timedelta object, format it as a time string
+        hours, remainder = divmod(duration_str.seconds // 3600, 1)
+        minutes = remainder * 60
+        return f"{int(hours):02}:{int(minutes):02}"
+
+    return str(duration_str)  # Return the original value as string if not recognized
+
 # CRUD operations for booking requests
 
 @BookingRequestRouter.get("/booking-requests/", response_model=list)
-async def read_booking_requests(
-    db=Depends(get_db)
-):
+async def read_booking_requests(db=Depends(get_db)):
     query = "SELECT * FROM booking_request"
     db[0].execute(query)
-    booking_requests = [{
-        "bookingRequestID": booking[0],
-        "instructorID": booking[1],
-        "computerLabID": booking[2],
-        "bookingDate": booking[3],
-        "bookingStartTime": booking[4],
-        "bookingEndTime": booking[5],
-        "bookingPurpose": booking[6],
-        "bookingReqStatus": booking[7],  # Include booking status
-    } for booking in db[0].fetchall()]
+    booking_requests = []
+
+    for booking in db[0].fetchall():
+        formatted_booking = {
+            "bookingRequestID": booking[0],
+            "instructorID": booking[1],
+            "computerLabID": booking[2],
+            "bookingDate": booking[3],
+            "bookingStartTime": format_time_from_duration(booking[4]),
+            "bookingEndTime": format_time_from_duration(booking[5]),
+            "bookingPurpose": booking[6],
+            "bookingReqStatus": booking[7],  # Include booking status
+        }
+        booking_requests.append(formatted_booking)
+
     return booking_requests
 
 @BookingRequestRouter.get("/booking-requests/newest-to-oldest", response_model=list)
@@ -35,23 +66,27 @@ async def read_booking_requests_from_newest_to_oldest(db=Depends(get_db)):
             ORDER BY bookingRequestID DESC
         """
         db[0].execute(query)
-        booking_requests = [{
-            "bookingRequestID": booking[0],
-            "instructorID": booking[1],
-            "computerLabID": booking[2],
-            "bookingDate": booking[3],
-            "bookingStartTime": booking[4],
-            "bookingEndTime": booking[5],
-            "bookingPurpose": booking[6],
-            "bookingReqStatus": booking[7]
-        } for booking in db[0].fetchall()]
+        booking_requests = []
+
+        for booking in db[0].fetchall():
+            formatted_booking = {
+                "bookingRequestID": booking[0],
+                "instructorID": booking[1],
+                "computerLabID": booking[2],
+                "bookingDate": booking[3],
+                "bookingStartTime": format_time_from_duration(booking[4]),
+                "bookingEndTime": format_time_from_duration(booking[5]),
+                "bookingPurpose": booking[6],
+                "bookingReqStatus": booking[7]
+            }
+            booking_requests.append(formatted_booking)
 
         return booking_requests
     except Exception as e:
         logger.exception("Error retrieving booking requests: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
     
-@BookingRequestRouter.get("/booking-requests/oldest-to-newest", response_model=list[dict])
+@BookingRequestRouter.get("/booking-requests/oldest-to-newest", response_model=list)
 async def read_booking_requests_from_oldest_to_newest(db=Depends(get_db)):
     try:
         # Retrieve booking requests sorted by creation date/time (oldest to newest)
@@ -60,16 +95,20 @@ async def read_booking_requests_from_oldest_to_newest(db=Depends(get_db)):
             ORDER BY bookingRequestID ASC
         """
         db[0].execute(query)
-        booking_requests = [{
-            "bookingRequestID": booking[0],
-            "instructorID": booking[1],
-            "computerLabID": booking[2],
-            "bookingDate": booking[3],
-            "bookingStartTime": booking[4],
-            "bookingEndTime": booking[5],
-            "bookingPurpose": booking[6],
-            "bookingReqStatus": booking[7]
-        } for booking in db[0].fetchall()]
+        booking_requests = []
+
+        for booking in db[0].fetchall():
+            formatted_booking = {
+                "bookingRequestID": booking[0],
+                "instructorID": booking[1],
+                "computerLabID": booking[2],
+                "bookingDate": booking[3],
+                "bookingStartTime": format_time_from_duration(booking[4]),
+                "bookingEndTime": format_time_from_duration(booking[5]),
+                "bookingPurpose": booking[6],
+                "bookingReqStatus": booking[7]
+            }
+            booking_requests.append(formatted_booking)
 
         return booking_requests
     except Exception as e:
@@ -90,13 +129,86 @@ async def read_booking_request(
             "instructorID": booking_request[1],
             "computerLabID": booking_request[2],
             "bookingDate": booking_request[3],
-            "bookingStartTime": booking_request[4],
-            "bookingEndTime": booking_request[5],
+            "bookingStartTime": format_time_from_duration(booking_request[4]),
+            "bookingEndTime": format_time_from_duration(booking_request[5]),
             "bookingPurpose": booking_request[6],
             "bookingReqStatus": booking_request[7],  # Include booking status
         }
     raise HTTPException(status_code=404, detail="Booking request not found")
 
+@BookingRequestRouter.get("/pending-booking-requests", response_model=list)
+async def get_pending_booking_requests(db=Depends(get_db)):
+    try:
+        # Retrieve pending booking requests
+        query_pending_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Pending'"
+
+        db[0].execute(query_pending_requests)
+        pending_requests = []
+        for request in db[0].fetchall():
+            formatted_booking = {
+            "bookingRequestID": request[0],
+            "instructorID": request[1],
+            "computerLabID": request[2],
+            "bookingDate": request[3],
+            "bookingStartTime": format_time_from_duration(request[4]),
+            "bookingEndTime": format_time_from_duration(request[5]),
+            "bookingPurpose": request[6]
+        } 
+            pending_requests.append(formatted_booking)
+        return pending_requests
+    
+    except Exception as e:
+        logger.exception("Error retrieving pending booking requests: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+    
+@BookingRequestRouter.get("/approved-booking-requests", response_model=list)
+async def get_approved_booking_requests(db=Depends(get_db)):
+    try:
+        # Retrieve approved booking requests
+        query_approved_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Approved'"
+        
+        db[0].execute(query_approved_requests)
+        approved_requests = []
+        for request in db[0].fetchall():
+            formatted_booking = {
+            "bookingRequestID": request[0],
+            "instructorID": request[1],
+            "computerLabID": request[2],
+            "bookingDate": request[3],
+            "bookingStartTime": format_time_from_duration(request[4]),
+            "bookingEndTime": format_time_from_duration(request[5]),
+            "bookingPurpose": request[6]
+        } 
+            approved_requests.append(formatted_booking)
+        return approved_requests
+    
+    except Exception as e:
+        logger.exception("Error retrieving approved booking requests: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+    
+@BookingRequestRouter.get("/rejected-booking-requests", response_model=list)
+async def get_rejected_booking_requests(db=Depends(get_db)):
+    try:
+        # Retrieve rejected booking requests
+        query_rejected_requests = "SELECT * FROM booking_request WHERE bookingReqStatus = 'Rejected'"
+        db[0].execute(query_rejected_requests)
+        rejected_requests = []
+        for request in db[0].fetchall():
+            formatted_booking = {
+            "bookingRequestID": request[0],
+            "instructorID": request[1],
+            "computerLabID": request[2],
+            "bookingDate": request[3],
+            "bookingStartTime": format_time_from_duration(request[4]),
+            "bookingEndTime": format_time_from_duration(request[5]),
+            "bookingPurpose": request[6]
+        } 
+            rejected_requests.append(formatted_booking)
+        return rejected_requests
+    
+    except Exception as e:
+        logger.exception("Error retrieving rejected booking requests: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
 @BookingRequestRouter.post("/booking-requests/", response_model=dict)
 async def create_booking_request(
@@ -193,5 +305,5 @@ async def delete_booking_request(
         return {"message": "Booking request deleted successfully"}
     except Exception as e:
         # Log the exception for troubleshooting
-        logging.error(f"Failed to delete booking request: {e}")
+        logger.error(f"Failed to delete booking request: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete booking request")
