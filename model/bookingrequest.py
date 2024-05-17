@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, APIRouter, Form
+from fastapi import Depends, HTTPException, APIRouter, Form, status
 from .db import get_db
 import logging
 from typing import List, Dict
@@ -67,6 +67,77 @@ async def read_booking_requests(db=Depends(get_db)):
         return booking_requests
     except Exception as e:
         logger.exception("Error retrieving booking requests: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error occurred.")
+
+@BookingRequestRouter.put("/booking-requests/{booking_request_id}/cancel", response_model=dict)
+async def cancel_booking_request(
+    booking_request_id: int, 
+    db=Depends(get_db)
+):
+    try:
+        # Fetch the booking request to ensure it exists
+        query = """
+            SELECT bookingRequestID, instructorID, bookingReqStatus
+            FROM booking_request
+            WHERE bookingRequestID = %s
+        """
+        db[0].execute(query, (booking_request_id,))
+        booking_request = db[0].fetchone()
+
+        if not booking_request:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking request not found")
+
+        # Check if the booking request is already cancelled or approved
+        if booking_request[2] in ["Cancelled", "Approved"]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Booking request is already {booking_request[2].lower()}")
+
+        # Update the status to 'Cancelled'
+        update_query = """
+            UPDATE booking_request
+            SET bookingReqStatus = 'Cancelled'
+            WHERE bookingRequestID = %s
+        """
+        db[0].execute(update_query, (booking_request_id,))
+        db[1].commit()
+
+        return {"message": "Booking request cancelled successfully"}
+    except HTTPException as e:
+        raise e  # Ensure HTTPExceptions are propagated properly
+    except Exception as e:
+        logger.exception("Error cancelling booking request: %s", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error occurred.")
+    
+@BookingRequestRouter.get("/booking-requests/instructor/{instructor_id}", response_model=list)
+async def read_booking_requests_by_instructor(instructor_id: int, db=Depends(get_db)):
+    try:
+        query = """
+            SELECT br.bookingRequestID, br.instructorID, br.computerLabID, br.bookingDate,
+                   br.bookingStartTime, br.bookingEndTime, br.bookingPurpose, br.bookingReqStatus,
+                   i.instructorID, CONCAT(i.instructorFirstName, ' ', i.instructorLastName) AS instructorName
+            FROM booking_request br
+            JOIN instructor i ON br.instructorID = i.instructorID
+            WHERE br.instructorID = %s
+        """
+        db[0].execute(query, (instructor_id,))
+        booking_requests = []
+
+        for booking in db[0].fetchall():
+            formatted_booking = {
+                "bookingRequestID": booking[0],
+                "instructorID": booking[1],
+                "instructorName": booking[9],  # Using the combined instructor name from index 9
+                "computerLabID": booking[2],
+                "bookingDate": booking[3],
+                "bookingStartTime": format_time_from_duration(booking[4]),
+                "bookingEndTime": format_time_from_duration(booking[5]),
+                "bookingPurpose": booking[6],
+                "bookingReqStatus": booking[7]
+            }
+            booking_requests.append(formatted_booking)
+
+        return booking_requests
+    except Exception as e:
+        logger.exception("Error retrieving booking requests for instructor: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
 @BookingRequestRouter.get("/booking-requests/newest-to-oldest", response_model=list)
