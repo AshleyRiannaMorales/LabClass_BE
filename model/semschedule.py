@@ -3,7 +3,7 @@ from fastapi import Depends, HTTPException, APIRouter, Form
 from .db import get_db
 from datetime import timedelta
 
-SemScheduleRouter = APIRouter(tags=["Semester Schedules"])
+SemScheduleRouter = APIRouter(tags=["Semester Schedule"])
 
 
 # CRUD operations for semester schedules

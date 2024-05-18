@@ -69,6 +69,47 @@ async def read_booking_requests(db=Depends(get_db)):
         logger.exception("Error retrieving booking requests: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
+@BookingRequestRouter.post("/booking-requests/", response_model=dict)
+async def create_booking_request(
+    instructorID: int = Form(...),
+    computer_lab_id: int = Form(...),
+    booking_date: str = Form(...),
+    booking_start_time: str = Form(...),
+    booking_end_time: str = Form(...),
+    booking_purpose: str = Form(...),
+    db=Depends(get_db)
+):
+    # Set default values
+    booking_req_status = 'Pending'
+
+    # Check for time conflicts
+    conflict_query = """
+        SELECT 1 FROM first_sem_sched
+        WHERE computerLabID = %s AND
+              schedDay = DAYNAME(%s) AND
+              (%s < schedEndTime AND %s > schedStartTime)
+    """
+    db[0].execute(conflict_query, (computer_lab_id, booking_date, booking_end_time, booking_start_time))
+    conflict = db[0].fetchone()
+    
+    if conflict:
+        raise HTTPException(status_code=409, detail="Time conflict with an existing schedule")
+
+    # Insert the booking request into the database
+    query = """
+        INSERT INTO booking_request 
+        (instructorID, computerLabID, bookingDate, bookingStartTime, bookingEndTime, bookingPurpose, bookingReqStatus) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """
+    db[0].execute(query, (instructorID, computer_lab_id, booking_date, booking_start_time, booking_end_time, booking_purpose, booking_req_status))
+    db[1].commit()
+
+    # Retrieve the last inserted ID using LAST_INSERT_ID()
+    db[0].execute("SELECT LAST_INSERT_ID()")
+    new_booking_request_id = db[0].fetchone()[0]
+
+    return {"bookingRequestID": new_booking_request_id}
+
 @BookingRequestRouter.put("/booking-requests/{booking_request_id}/cancel", response_model=dict)
 async def cancel_booking_request(
     booking_request_id: int, 

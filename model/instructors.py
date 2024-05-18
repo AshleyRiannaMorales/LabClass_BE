@@ -2,27 +2,12 @@ from fastapi import Depends, HTTPException, APIRouter, Form
 from .db import get_db
 import bcrypt
 import logging
+from mysql.connector import errors
 
 InstructorsRouter = APIRouter(tags=["Instructors"])
 logger = logging.getLogger(__name__)
 
 # CRUD operations for instructors
-
-@InstructorsRouter.get("/instructors/", response_model=list)
-async def read_instructors(db=Depends(get_db)):
-    query = "SELECT instructorID, instructorEmail, InstructorFirstName, InstructorLastName, InstructorMiddleName FROM instructor"
-    db[0].execute(query)
-    instructors = [
-        {
-            "instructorID": instructor[0],
-            "instructorEmail": instructor[1],
-            "InstructorFirstName": instructor[2],
-            "InstructorLastName": instructor[3],
-            "InstructorMiddleName": instructor[4]
-        }
-        for instructor in db[0].fetchall()
-    ]
-    return instructors
 
 @InstructorsRouter.post("/verify/instructor", response_model=dict)
 async def verify_instructor_request(
@@ -43,6 +28,14 @@ async def verify_instructor_request(
         db[1].commit()
 
         return {"message": "Verification request submitted successfully."}
+    except errors.IntegrityError as e:
+        # Check if the error code corresponds to a foreign key constraint failure
+        if e.errno == 1452:
+            logger.error("Instructor credentials not found: %s", e)
+            raise HTTPException(status_code=400, detail="Instructor credentials not found in our database. Try contacting the School Administrator if you think this is a mistake.")
+        else:
+            logger.exception("Database integrity error: %s", e)
+            raise HTTPException(status_code=500, detail="Internal server error occurred.")
     except Exception as e:
         logger.exception("Error submitting verification request: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
