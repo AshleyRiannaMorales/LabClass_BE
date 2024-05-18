@@ -99,7 +99,6 @@ async def read_instructor_accounts(db=Depends(get_db)):
         logger.exception("Error fetching instructor accounts: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error occurred.")
 
-
 @AdminRouter.post("/admin/create", response_model=dict)
 async def create_admin(
     admin_id: int = Form(...),
